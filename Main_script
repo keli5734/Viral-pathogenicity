@@ -1,0 +1,293 @@
+rm(list=ls())  # clear memory
+
+
+library(rstan)
+library(tidyverse)
+library(bayesplot)
+library(deSolve)
+library(readxl)
+
+# H1N1
+
+V.dataset.HP <- read_excel("ViralLoadData.xls", sheet = "1918")
+V.data.HP <- V.dataset.HP$Y
+V.time.HP <- V.dataset.HP$Day
+
+M.dataset.HP <- read_excel("MacrophageData.xls", sheet = "1918")
+M.data.HP <- M.dataset.HP$Y
+M.data.HP <- M.data.HP * 1e+5
+M.time.HP <- M.dataset.HP$Day
+
+
+
+V.dataset.LP <- read_excel("ViralLoadData.xls", sheet = "TX91")
+V.data.LP <- V.dataset.LP$Y
+V.time.LP <- V.dataset.LP$Day
+
+M.dataset.LP <- read_excel("MacrophageData.xls", sheet = "TX91")
+M.data.LP <- M.dataset.LP$Y
+M.data.LP <- M.data.LP * 1e+5
+M.time.LP <- M.dataset.LP$Day
+
+
+
+data.combined <-  list(V_time_len_HP = length(V.time.HP),
+                       V_data_len_HP = length(V.data.HP),
+                       V_time_data_HP = round(V.time.HP),
+                       log_V_data_HP = log(V.data.HP), # above viral load data.HP
+                       V_time_len_LP = length(V.time.LP),
+                       V_data_len_LP = length(V.data.LP),
+                       V_time_data_LP = round(V.time.LP),
+                       log_V_data_LP = log(V.data.LP), # above viral load data.LP
+                       M_time_len_HP = length(M.time.HP),
+                       M_data_len_HP = length(M.data.HP),
+                       M_time_data_HP = round(M.time.HP),
+                       log_M_data_HP = log(M.data.HP), # above macrophage data.HP
+                       M_time_len_LP = length(M.time.LP),
+                       M_data_len_LP = length(M.data.LP),
+                       M_time_data_LP = round(M.time.LP),
+                       log_M_data_LP = log(M.data.LP), # above macrophage data.LP
+                       t0 = 0,
+                       M10 = 0,
+                       M20 = 0,
+                       T0 = 7e+7,
+                       I0 = 0,
+                       F0 = 0,
+                       R0 = 0,
+                       D0 = 0)
+
+
+
+
+
+init_condition1 <- list(
+  log10_theta_HP = c(log10(3), # sV
+                  log10(3e-8), # beta
+                  log10(2e-6), # p_FI
+                  log10(4e-7), # p_FM
+                  log10(150),  # kappa_AS
+                  log10(330),  # sM
+                  log10(80),  # V0
+                  log10(1e-6)),  # q_prime
+  
+  log10_theta_LP =  c(log10(10), # sV
+                      log10(3e-8), # beta
+                      log10(2e-5), # p_FI
+                      log10(4e-7), # p_FM
+                      log10(150),  # kappa_AS
+                      log10(5e-5)),  # q_prime
+  sigma = c(1, 1))
+
+
+
+
+
+init_condition2 <- list(
+  log10_theta_HP = c(log10(1), # sV
+                     log10(9e-8), # beta
+                     log10(8e-6), # p_FI
+                     log10(9e-7), # p_FM
+                     log10(200),  # kappa_AS
+                     log10(100),  # sM
+                     log10(30),
+                     log10(1e-5)), # V0
+  
+  log10_theta_LP =  c(log10(7), # sV
+                      log10(4e-8), # beta
+                      log10(1e-5), # p_FI
+                      log10(10e-7), # p_FM
+                      log10(150),  # kappa_AS
+                      log10(8e-6)), # V0
+  sigma = c(1, 1))
+
+
+
+
+
+
+
+init_condition3 <- list(
+  log10_theta_HP = c(log10(10), # sV
+                     log10(3e-7), # beta
+                     log10(8e-6), # p_FI
+                     log10(10e-7), # p_FM
+                     log10(100),  # kappa_AS
+                     log10(400),  # sM
+                     log10(100)), # V0
+  
+  log10_theta_LP =  c(log10(20), # sV
+                      log10(3e-8), # beta
+                      log10(1e-5), # p_FI
+                      log10(7e-7), # p_FM
+                      log10(180),  # kappa_AS
+                      log10(10)), # V0
+  sigma = c(1, 1))
+
+
+options(mc.cores=parallel::detectCores()) # to utilise all cores available in your computer
+
+fit_Model_H1N1 <- stan("Model.stan",
+                          data = data.combined,
+                          pars = c("log10_theta_HP","log10_theta_LP","sigma"),
+                          seed = 25112021,  # set random seed for reproducibility
+                          iter = 3000,
+                          chains = 1,
+                          init = list(init_condition2),
+                          warmup = 1500,
+                          control = list(adapt_delta = 0.99, max_treedepth = 15))
+
+
+
+print(fit_Model_H1N1, pars = c("log10_theta_HP", "log10_theta_LP"))
+
+
+stan_dens(fit_Model_H1N1.LP , pars = c("log10_theta"), separate_chains = TRUE,nrow = 6)
+# change names ! 
+
+
+
+mack_diagnostics <- rstan::get_sampler_params(fit_Model_H1N1.LP ) %>% 
+  set_names(as.factor(1:2)) %>% 
+  map_df(as_data_frame, .id = 'chain') %>% 
+  group_by(chain) %>% 
+  mutate(iteration = 1:length(chain)) %>% 
+  mutate(warmup = iteration <= 1000)
+
+mack_diagnostics %>% 
+  group_by(warmup, chain) %>% 
+  summarise(percent_divergent = mean(divergent__ > 0)) %>% 
+  ggplot()+ 
+  geom_col(aes(chain, percent_divergent, fill = warmup), position = 'dodge', color = 'black') + 
+  scale_y_continuous(labels = scales::percent, name = "% Divergent Runs") + 
+  theme_bw() # plot divergent rate for each chain 
+
+mack_diagnostics %>% 
+  ggplot(aes(iteration, treedepth__, color = chain)) + 
+  geom_line() + 
+  geom_hline(aes(yintercept = 15), color = 'red') + 
+  theme_bw() # plot treedepth for each chain 
+
+
+mack_diagnostics %>% 
+  ggplot(aes(iteration, stepsize__, color = chain)) + 
+  geom_line() + 
+  lims(y = c(0,.1)) + 
+  theme_bw() # plot stepsize for each chain 
+
+
+# PARAMETER DIAGNOSTICS
+para_summary <- summary(fit_Model_H1N1.LP )$summary %>% 
+  as.data.frame() %>% 
+  mutate(variable = rownames(.)) %>% 
+  select(variable, everything()) %>% 
+  as_data_frame()
+
+# n_eff 
+para_summary %>% 
+  ggplot(aes(n_eff)) + 
+  geom_histogram(binwidth = 50) + 
+  geom_vline(aes(xintercept = 4000), color = 'red')
+
+# R_hat
+
+para_summary %>% 
+  ggplot(aes(Rhat)) + 
+  geom_histogram() + 
+  geom_vline(aes(xintercept = 1.01), color = 'red')
+
+# parameter 
+
+para_summary %>% 
+  filter(variable %in% c('theta[1]', 'theta[2]', 'theta[3]','theta[4]', 'theta[5]', 'epsilon')) %>% 
+  ggplot() + 
+  geom_linerange(aes(variable, ymin = `2.5%`,ymax = `97.5%`)) + 
+  geom_crossbar(aes(variable, mean, ymin = `25%`, ymax = `75%`), fill= 'grey') + 
+  facet_wrap(~variable, scales = 'free') + 
+  theme_bw()
+
+
+# plot sampling parameters 
+c_light <- c("#DCBCBC")
+c_light_highlight <- c("#C79999")
+c_mid <- c("#B97C7C")
+c_mid_highlight <- c("#A25050")
+c_dark <- c("#8F2727")
+c_dark_highlight <- c("#7C0000")
+
+params_cp <- as.data.frame(rstan::extract(fit_Model_TIV , permuted=FALSE))
+
+names(params_cp) <- gsub("chain:1.", "", names(params_cp), fixed = TRUE)
+names(params_cp) <- gsub("[", ".", names(params_cp), fixed = TRUE)
+names(params_cp) <- gsub("]", "", names(params_cp), fixed = TRUE)
+params_cp$iter <- 1:1000
+
+plot(params_cp$iter, params_cp$theta.10, col=c_dark, pch=16, cex=0.8,
+     xlab="Iteration", ylab="epsilon2 (Chain1)", ylim=c(0,1))
+plot(params_cp$iter, params_cp$`chain:2.theta.10`, col=c_dark, pch=16, cex=0.8,
+     xlab="Iteration", ylab="epsilon2 (Chain2)", ylim=c(0,1))
+
+running_means <- sapply(params_cp$iter, function(n) mean(params_cp$theta.10[1:n]))
+plot(params_cp$iter, running_means, col=c_dark, pch=16, cex=0.8, ylim=c(0, 1),
+     xlab="Iteration", ylab="epsilon2")
+
+
+
+divergent <- get_sampler_params(fit_Model_TIV , inc_warmup=FALSE)[[1]][,'divergent__']
+params_cp$divergent <- divergent
+
+div_params_cp <- params_cp[params_cp$divergent == 1,]
+nondiv_params_cp <- params_cp[params_cp$divergent == 0,]
+
+plot(div_params_cp$theta.9, div_params_cp$theta.10,
+     col="green", pch=16, cex=0.8, xlab="phi", ylab="epsilon2",
+     xlim=c(0,50), ylim=c(0,1))
+points(nondiv_params_cp$theta.9, nondiv_params_cp$theta.10,
+       col=c_dark, pch=16, cex=0.8)
+
+
+# show mcmc_parcoord
+draws <- as.array(fit_Model_IR ,pars = c("theta_WT"))
+np <- nuts_params(fit_Model_IR )
+str(np)
+
+color_scheme_set("darkgray")
+div_style <- parcoord_style_np(div_color = "green", div_size = 0.5, div_alpha = 0.9)
+mcmc_parcoord(
+  draws,
+  transform = function(x) {(x - mean(x)) / sd(x)},
+  size = 0.25,
+  alpha = 0.3,
+  np = np,
+  np_style = div_style
+)
+d <- mcmc_parcoord_data(draws, np = np)
+head(d)
+tail(d)
+
+
+
+fit_Model_H1N1.HP <- readRDS('fit_Model_H1N1.HP.1602.rds')
+
+
+# extract posterior samples for selected parameters
+posterior_samples_all_IR = rstan::extract(fit_Model_H1N1.HP , pars = c("log10_theta",'sigma'), inc_warmup = TRUE, permuted = FALSE)
+posterior_samples_merged_after_burnin_IR = rstan::extract(fit_Model_H1N1.HP , pars = c( "log10_theta",'sigma'))
+
+color_scheme_set("brewer-Spectral")
+mcmc_trace(posterior_samples_all_IR, n_warmup = 1000,
+           facet_args = list(nrow = 4, labeller = label_parsed))
+
+
+
+
+# =============== Save the fitting results and generate outputs in CSV file  ===================
+write.csv(posterior_samples_merged_after_burnin_IR, file="H1N1.HP.para.csv")
+save.image(file = "fitting_results_Mu1")
+saveRDS(fit_Model_IR, "fit_IR.rds")
+
+
+
+
+
+
+
