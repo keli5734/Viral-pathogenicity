@@ -2,7 +2,7 @@ functions{
   real[]  Model_fitting(real t, real[] y, real[] theta, real[] x_r, int[] x_i){
     
 
-    real dydt[9];
+    real dydt[10];
     
     
     dydt[1] = theta[6] - 1.1e-2 * y[1] - 0.4 * (y[6]/(y[6] + 1.2e+7)) * (1/(1 + 1e-4 * y[3])) * y[1] + 0.3 * y[2] - 4e-6 * (y[9]/ (y[9]+1e+6)) * y[1] + 0.3 * y[3];
@@ -10,14 +10,16 @@ functions{
     dydt[3] = 4e-6 * (y[9]/ (y[9]+1e+6)) * y[1] - 0.3 * y[3] - 1.1e-2 * y[3];
     
     
-    dydt[4] =  0.8 * (y[4]+y[8]) * (1 - (y[4] + y[5] + y[8] + y[9])/ 7e+7) - theta[2] * y[4] * y[6] - 0.33 * y[7] * y[4] + 2.6 * y[8]; // T
-    dydt[5] =  theta[2] * y[4] * y[6] - 3 * y[5] - 3 * y[7] * y[5] - 8 * ( t^4 / (t^4 + 10^4) ) * y[5]; // I 
-    dydt[6] =  210 * y[5] - 20 * y[6] - theta[5] * ( t^4 / (t^4 + 10^4 ) ) * y[6] - theta[8] * y[1] *y[6]; // V
+    dydt[4] =  0.8 * (y[4]+y[8]) * (1 - (y[4] + y[5] + y[8])/ 7e+7) - theta[2] * y[4] * y[6] - 0.33 * y[7] * y[4] + 2.6 * y[8]; // T
+    dydt[5] =  4 * y[10] - 2 * y[5] - 3 * y[7] * y[5] - 8 * ( t^4 / (t^4 + 10^4) ) * y[5]; // I 
+    dydt[6] =  210 * y[5] - 5 * y[6] - theta[5] * ( t^4 / (t^4 + 10^4 ) ) * y[6] - theta[7] * y[1] *y[6]; // V
 
 
     dydt[7] = theta[3] * y[5] + theta[4] * y[2] - 2 * y[7]; // F
-    dydt[8] = 0.33 * y[7] * y[4] - 2.6 * y[8]; // R
-    dydt[9] = 3 * y[5] +  3 * y[7] * y[5] + 8 * ( t^4 / (t^4 + 10^4) ) * y[5] - 8e-7 * y[9] * y[2] - 2 * y[9]; // D
+    dydt[8] =  0.33 * y[7] * y[4] - 2.6 * y[8]; // R
+    dydt[9] =  2 * y[5] +  3 * y[7] * y[5] + 8 * ( t^4 / (t^4 + 10^4) ) * y[5] - 8e-7 * y[9] * y[2] - 2 * y[9]; // D
+    dydt[10] = theta[2] * y[4] * y[6] - 4 * y[10]; // latent state infected cells I2, l = 4 per day which equivalent to 6 hrs
+    
     
 
     return dydt;
@@ -45,6 +47,8 @@ data{
   real M_time_data_LP[M_time_len_LP]; // time series data LP
   real log_M_data_LP[M_data_len_LP]; // viral load data LP
   
+ 
+  
   real t0; // initial time point 
   real M10;
   real M20;
@@ -53,6 +57,7 @@ data{
   real F0; // initial interferon
   real R0; // initial resistant cells
   real D0;  
+  real I20; // initial value for latent-state infected cells 
   
 }
 
@@ -73,10 +78,10 @@ parameters{
 
 transformed parameters{
   
-  real V_hat_HP[V_time_len_HP,9];
-  real V_hat_LP[V_time_len_LP,9];
-  real M_hat_HP[M_time_len_HP,9];
-  real M_hat_LP[M_time_len_LP,9];
+ real V_hat_HP[V_time_len_HP,10];
+  real V_hat_LP[V_time_len_LP,10];
+  real M_hat_HP[M_time_len_HP,10];
+  real M_hat_LP[M_time_len_LP,10];
   
   vector[V_data_len_HP] V_pred_HP;
   vector[V_data_len_LP] V_pred_LP;
@@ -84,8 +89,8 @@ transformed parameters{
   vector[M_data_len_LP] M_pred_LP;
   
 
-  real Y0_HP[9];
-  real Y0_LP[9];
+  real Y0_HP[10];
+  real Y0_LP[10];
   
   real theta_hat_HP[8];
   real theta_hat_LP[8];
@@ -99,8 +104,9 @@ transformed parameters{
   theta_hat_HP[4] = 10^log10_theta_HP[4]; // q_FM
   theta_hat_HP[5] = 10^log10_theta_HP[5]; // kappa_AS
   theta_hat_HP[6] = 10^log10_theta_HP[6]; // sM
-  theta_hat_HP[7] = 10^log10_theta_HP[7]; // V0
-  theta_hat_HP[8] = 10^log10_theta_HP[8]; // q_prime
+  theta_hat_HP[7] = 10^log10_theta_HP[7]; // q_prime
+  theta_hat_HP[8] = 10^log10_theta_HP[8]; // V0
+
   
   
   
@@ -110,8 +116,9 @@ transformed parameters{
   theta_hat_LP[4] = 10^log10_theta_LP[4]; // q_FM
   theta_hat_LP[5] = 10^log10_theta_LP[5]; // kappa_AS
   theta_hat_LP[6] = 10^log10_theta_HP[6]; // sM
-  theta_hat_LP[7] = 10^log10_theta_HP[7]; // V0
-  theta_hat_LP[8] = 10^log10_theta_LP[6]; // q_prime
+  theta_hat_LP[7] = 10^log10_theta_LP[6]; // q_prime
+  theta_hat_LP[8] = 10^log10_theta_HP[8]; // V0
+
 
 
   Y0_HP[1] = theta_hat_HP[6] / 1.1e-2;
@@ -119,10 +126,11 @@ transformed parameters{
   Y0_HP[3] = M20;
   Y0_HP[4] = T0;
   Y0_HP[5] = I0;
-  Y0_HP[6] = theta_hat_HP[7];
+  Y0_HP[6] = theta_hat_HP[8];
   Y0_HP[7] = F0;
   Y0_HP[8] = R0;
   Y0_HP[9] = D0;
+  Y0_HP[10] = I20;
   
   
   
@@ -131,10 +139,11 @@ transformed parameters{
   Y0_LP[3] = M20;
   Y0_LP[4] = T0;
   Y0_LP[5] = I0;
-  Y0_LP[6] = theta_hat_LP[7];
+  Y0_LP[6] = theta_hat_LP[8]; 
   Y0_LP[7] = F0;
   Y0_LP[8] = R0;
   Y0_LP[9] = D0;
+  Y0_LP[10] = I20;
   
   
   V_hat_HP = integrate_ode_bdf(Model_fitting, Y0_HP, t0, V_time_data_HP, theta_hat_HP, x_r, x_i);
@@ -158,6 +167,9 @@ transformed parameters{
     M_pred_LP[j] = M_hat_LP[j,1] + M_hat_LP[j,2] + M_hat_LP[j,3];  
   }
 
+  
+ 
+
 
 }
 
@@ -165,18 +177,20 @@ model{
 
 //priors
 log10_theta_HP[1] ~ normal(-1,2); // s_V
-log10_theta_HP[2] ~ normal(-6,3); // beta
-log10_theta_HP[3] ~ normal(-5,3); // q_FI
-log10_theta_HP[4] ~ normal(-7,3); // q_FM
+log10_theta_HP[2] ~ normal(-4,3); // beta
+log10_theta_HP[3] ~ normal(-3,3); // q_FI
+log10_theta_HP[4] ~ normal(-3,3); // q_FM
 log10_theta_HP[5] ~ normal(2,1); // kappa_AS
 log10_theta_HP[6] ~ normal(2,1); // sM
-log10_theta_HP[7] ~ uniform(0,2); // V0
-log10_theta_HP[8] ~ normal(-6,3); // q_prime
+log10_theta_HP[7] ~ normal(-6,3); // q_prime
+log10_theta_HP[8] ~ normal(1,1); // V0
+
+
 
 log10_theta_LP[1] ~ normal(-1,2); // s_V
 log10_theta_LP[2] ~ normal(-6,3); // beta
-log10_theta_LP[3] ~ normal(-5,3); // q_FI
-log10_theta_LP[4] ~ normal(-7,3); // q_FM
+log10_theta_LP[3] ~ normal(-6,3); // q_FI
+log10_theta_LP[4] ~ normal(-6,3); // q_FM
 log10_theta_LP[5] ~ normal(2,1); // kappa_AS
 log10_theta_LP[6] ~ normal(-6,3); // q_prime
 
@@ -208,7 +222,8 @@ for (i in 1: M_time_len_HP){
   
 for (i in 1: M_time_len_LP){
   target += normal_lpdf(log_M_data_LP[i] | log(M_pred_LP[i]), sigma[2]);
-  }  
+  } 
+
 
 }
 
