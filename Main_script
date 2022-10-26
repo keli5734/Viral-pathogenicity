@@ -54,7 +54,8 @@ data.combined <-  list(V_time_len_HP = length(V.time.HP),
                        I0 = 0,
                        F0 = 0,
                        R0 = 0,
-                       D0 = 0)
+                       D0 = 0,
+                       I20 = 0)
 
 
 
@@ -62,13 +63,13 @@ data.combined <-  list(V_time_len_HP = length(V.time.HP),
 
 init_condition1 <- list(
   log10_theta_HP = c(log10(3), # sV
-                  log10(3e-8), # beta
-                  log10(2e-6), # p_FI
-                  log10(4e-7), # p_FM
-                  log10(150),  # kappa_AS
-                  log10(330),  # sM
-                  log10(80),  # V0
-                  log10(1e-6)),  # q_prime
+                     log10(3e-8), # beta
+                     log10(2e-6), # p_FI
+                     log10(4e-7), # p_FM
+                     log10(150),  # kappa_AS
+                     log10(330),  # sM
+                     log10(1e-6), # q_prime
+                     log10(80)),  # V0
   
   log10_theta_LP =  c(log10(10), # sV
                       log10(3e-8), # beta
@@ -89,15 +90,15 @@ init_condition2 <- list(
                      log10(9e-7), # p_FM
                      log10(200),  # kappa_AS
                      log10(100),  # sM
-                     log10(30),
-                     log10(1e-5)), # V0
+                     log10(1e-5), # qprime
+                     log10(30)), # V0
   
   log10_theta_LP =  c(log10(7), # sV
                       log10(4e-8), # beta
                       log10(1e-5), # p_FI
                       log10(10e-7), # p_FM
                       log10(150),  # kappa_AS
-                      log10(8e-6)), # V0
+                      log10(8e-6)), # q_prime
   sigma = c(1, 1))
 
 
@@ -113,6 +114,7 @@ init_condition3 <- list(
                      log10(10e-7), # p_FM
                      log10(100),  # kappa_AS
                      log10(400),  # sM
+                     log10(1e-5),  # q_prime
                      log10(100)), # V0
   
   log10_theta_LP =  c(log10(20), # sV
@@ -120,22 +122,23 @@ init_condition3 <- list(
                       log10(1e-5), # p_FI
                       log10(7e-7), # p_FM
                       log10(180),  # kappa_AS
-                      log10(10)), # V0
+                      log10(2e-5)), # q_prime
   sigma = c(1, 1))
 
 
 options(mc.cores=parallel::detectCores()) # to utilise all cores available in your computer
 
-fit_Model_H1N1 <- stan("Model.stan",
-                          data = data.combined,
-                          pars = c("log10_theta_HP","log10_theta_LP","sigma"),
-                          seed = 25112021,  # set random seed for reproducibility
-                          iter = 3000,
-                          chains = 1,
-                          init = list(init_condition2),
-                          warmup = 1500,
-                          control = list(adapt_delta = 0.99, max_treedepth = 15))
+fit_Model_H1N1 <- stan("Model_2610.stan",
+                       data = data.combined,
+                       pars = c("log10_theta_HP","log10_theta_LP","sigma"),
+                       seed = 25112021,  # set random seed for reproducibility
+                       iter = 3000,
+                       chains = 3,
+                       init = list(init_condition1, init_condition2,init_condition3),
+                       warmup = 1000,
+                       control = list(adapt_delta = 0.99, max_treedepth = 15))
 
+saveRDS(fit_Model_H1N1, file = "fit_Model_H1N1_2610.rds")
 
 
 print(fit_Model_H1N1, pars = c("log10_theta_HP", "log10_theta_LP"))
